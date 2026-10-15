@@ -1,111 +1,93 @@
-
+// test/citaService.test.js
 const test = require('node:test');
 const assert = require('node:assert/strict');
-
 const { crearCitaService } = require('../src/aplicacion/citaService');
-const { ErrorDeNegocio } = require('../src/dominio/reglasDeAgenda');
-const {
-  validarCitaRepository
-} = require('../src/aplicacion/contratos/repositorios');
 
-function crearRepositoriosSimulados() {
-  const citaRepository = {
-    listarTodas: async () => [],
-    existeEnHorario: async () => false,
-    guardar: async () => 123
+function crearServicioParaPrueba(ocupado = false) {
+  let guardadas = 0;
+  let consultasDisponibilidad = 0;
+  const servicio = crearCitaService({
+    citaRepository: {
+      listarTodas: async () => [],
+      existeEnHorario: async () => {
+        consultasDisponibilidad++;
+        return ocupado;
+      },
+      guardar: async () => {
+        guardadas++;
+        return 7;
+      }
+    },
+    profesionalRepository: { listarTodos: async () => [] },
+    reloj: () => new Date('2026-10-01T00:00:00Z')
+  });
+  return {
+    servicio,
+    guardadas: () => guardadas,
+    consultasDisponibilidad: () => consultasDisponibilidad
   };
-
-  const profesionalRepository = {
-    listarTodos: async () => [
-      { id: 1, nombre: 'Profesional de prueba', especialidad: 'General' }
-    ]
-  };
-
-  return { citaRepository, profesionalRepository };
 }
 
-test('1. Reserva una cita cuando el horario está libre', async () => {
-  const { citaRepository, profesionalRepository } =
-    crearRepositoriosSimulados();
-
-  const service = crearCitaService({
-    citaRepository,
-    profesionalRepository
-  });
-
-  const resultado = await service.reservarCita({
-    paciente: 'Paciente de prueba',
+test('1. reserva permitida', async () => {
+  const x = crearServicioParaPrueba();
+  const respuesta = await x.servicio.reservarCita({
+    paciente: 'Ana',
     profesional_id: 1,
-    fecha_hora: '2099-12-31T10:00:00.000Z'
+    fecha_hora: '2026-11-15T10:00:00Z'
   });
-
-  assert.deepEqual(resultado, {
-    mensaje: 'Cita creada',
-    id: 123
-  });
+  assert.equal(respuesta.id, 7);
+  assert.equal(x.guardadas(), 1);
 });
 
-test('2. Rechaza una cita cuando el horario está ocupado', async () => {
-  const { citaRepository, profesionalRepository } =
-    crearRepositoriosSimulados();
-
-  citaRepository.existeEnHorario = async () => true;
-
-  const service = crearCitaService({
-    citaRepository,
-    profesionalRepository
-  });
-
+test('2. agenda ocupada no genera escritura', async () => {
+  const x = crearServicioParaPrueba(true);
   await assert.rejects(
-    service.reservarCita({
-      paciente: 'Paciente de prueba',
-      profesional_id: 1,
-      fecha_hora: '2099-12-31T10:00:00.000Z'
-    }),
-    error =>
-      error instanceof ErrorDeNegocio &&
-      error.codigo === 'AGENDA_OCUPADA'
+    () =>
+      x.servicio.reservarCita({
+        paciente: 'Ana',
+        profesional_id: 1,
+        fecha_hora: '2026-11-15T10:00:00Z'
+      }),
+    { codigo: 'AGENDA_OCUPADA' }
   );
+  assert.equal(x.guardadas(), 0);
 });
 
-test('3. Rechaza una cita con fecha pasada sin consultar disponibilidad', async () => {
-  const { citaRepository, profesionalRepository } =
-    crearRepositoriosSimulados();
-
-  let consultas = 0;
-
-  citaRepository.existeEnHorario = async () => {
-    consultas++;
-    return false;
-  };
-
-  const service = crearCitaService({
-    citaRepository,
-    profesionalRepository
-  });
-
+test('3. fecha pasada se rechaza sin consultar PostgreSQL', async () => {
+  const x = crearServicioParaPrueba();
   await assert.rejects(
-    service.reservarCita({
-      paciente: 'Paciente de prueba',
-      profesional_id: 1,
-      fecha_hora: '2000-01-01T10:00:00.000Z'
-    }),
-    error =>
-      error instanceof ErrorDeNegocio &&
-      error.codigo === 'FECHA_PASADA'
+    () =>
+      x.servicio.reservarCita({
+        paciente: 'Ana',
+        profesional_id: 1,
+        fecha_hora: '2026-09-01T10:00:00Z'
+      }),
+    { codigo: 'FECHA_PASADA' }
   );
-
-  assert.equal(consultas, 0);
+  assert.equal(x.guardadas(), 0);
+  assert.equal(x.consultasDisponibilidad(), 0);
 });
 
-test('4. Rechaza un repositorio que no cumple el contrato', () => {
+// CUARTA PRUEBA DEL EQUIPO:
+test('4. rechaza ensamblaje si citaRepository incumple el contrato (falta guardar)', () => {
   const repositorioIncompleto = {
-    listarTodas: async () => []
+    listarTodas: async () => [],
+    existeEnHorario: async () => false
+    // Falta el método guardar() deliberadamente
+  };
+  const profesionalRepoValido = {
+    listarTodos: async () => []
   };
 
   assert.throws(
-    () => validarCitaRepository(repositorioIncompleto),
-    /existeEnHorario/
+    () =>
+      crearCitaService({
+        citaRepository: repositorioIncompleto,
+        profesionalRepository: profesionalRepoValido
+      }),
+    {
+      name: 'TypeError',
+      message: /citaRepository debe implementar.*guardar/i
+    }
   );
 });
-

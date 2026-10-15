@@ -1,8 +1,10 @@
-
 const express = require('express');
 const { ErrorDeNegocio } = require('../dominio/reglasDeAgenda');
 
-function crearCitasRoutes(citaService) {
+function crearCitasRoutes(parametro) {
+  // Permite recibir tanto crearCitasRoutes({ citaService }) como crearCitasRoutes(citaService)
+  const citaService = parametro?.citaService || parametro;
+
   const router = express.Router();
 
   const CODIGO_HTTP = {

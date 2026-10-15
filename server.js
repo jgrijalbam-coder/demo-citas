@@ -1,4 +1,3 @@
-
 const express = require('express');
 const cors = require('cors');
 const path = require('path');
@@ -17,8 +16,8 @@ const citaService = crearCitaService({
   profesionalRepository
 });
 
-// Entregar el servicio a las rutas
-const citasRoutes = crearCitasRoutes(citaService);
+// Entregar el servicio a las rutas (soporta objeto { citaService } según guía Semana 9)
+const citasRoutes = crearCitasRoutes({ citaService });
 
 app.use(cors());
 app.use(express.json());
@@ -31,4 +30,3 @@ app.listen(PORT, () => {
   console.log(`Servidor escuchando en el puerto ${PORT}`);
   console.log(`Cliente web: http://localhost:${PORT}`);
 });
-

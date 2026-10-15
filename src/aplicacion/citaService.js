@@ -1,4 +1,3 @@
-
 const reglas = require('../dominio/reglasDeAgenda');
 
 const {
@@ -6,7 +5,11 @@ const {
   validarProfesionalRepository
 } = require('./contratos/repositorios');
 
-function crearCitaService({ citaRepository, profesionalRepository }) {
+function crearCitaService({
+  citaRepository,
+  profesionalRepository,
+  reloj = () => new Date()
+}) {
   validarCitaRepository(citaRepository);
   validarProfesionalRepository(profesionalRepository);
 
@@ -20,7 +23,7 @@ function crearCitaService({ citaRepository, profesionalRepository }) {
 
   async function reservarCita(datos) {
     reglas.validarDatosCompletos(datos);
-    reglas.validarFechaFutura(datos.fecha_hora);
+    reglas.validarFechaFutura(datos.fecha_hora, reloj());
 
     const ocupado = await citaRepository.existeEnHorario(
       datos.profesional_id,
